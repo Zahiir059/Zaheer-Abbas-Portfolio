@@ -267,3 +267,17 @@ body.visitor nav, body.visitor .actions [data-act="edit"], body.visitor .actions
   .hero, .tl, .sk, .pcard, .stat-c { break-inside: avoid; border-color: #bbb; }
   .cover { height: 6rem; }
 }
+
+/* documents and chips */
+.docs { display: grid; gap: .6rem; }
+.doc { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .65rem .8rem; }
+.ext { min-width: 3rem; text-align: center; font: 700 .75rem var(--font-mono); text-transform: uppercase; padding: .45rem .3rem; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.dn { flex: 1; min-width: 8rem; display: grid; overflow-wrap: anywhere; }
+.dn small { color: var(--muted); }
+.dbtn { display: flex; gap: .4rem; flex-wrap: wrap; }
+.dbtn a.btn { text-decoration: none; }
+.pv { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.chip { font: .8rem var(--font); padding: .35rem .8rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+@media print { .docs { display: none; } }

@@ -1,5 +1,5 @@
 // Network first, cache as the fallback. Updates reach you when online; the app still opens offline.
-const CACHE = 'portfolio-builder-v2';
+const CACHE = 'portfolio-builder-v3';
 const FILES = ['./', './index.html', './style.css', './app.js', './seed.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {

@@ -263,7 +263,7 @@
       draft = p ? draftFrom(p) : blankDraft();
       renderForm();
     } else if (v === 'detail') renderDetail(id);
-    else if (v === 'profile') { pdraft = Object.assign({}, profile); renderProfile(); }
+    else if (v === 'profile') { pdraft = Object.assign({}, profile); pdraft.docs = (profile.docs || []).slice(); renderProfile(); }
     else if (v === 'backup') renderBackup();
     else { current = 'portfolio'; renderPortfolio(); }
     $$('#nav button').forEach((b) => {
@@ -272,6 +272,28 @@
     });
     window.scrollTo(0, 0);
     view.focus({ preventScroll: true });
+  }
+
+  /* ---------- documents ---------- */
+  const fsize = (b) => (b.size < 1048576 ? Math.max(1, Math.round(b.size / 1024)) + ' KB' : (b.size / 1048576).toFixed(1) + ' MB');
+  const ext = (n) => ((String(n).split('.').pop() || 'file').toLowerCase()).slice(0, 4);
+  const fileToObj = async (f) => ({ name: f.name, type: f.type, data: await toDataURL(f) });
+  const objToFile = async (o) => new File([await toBlob(o.data)], o.name, { type: o.type });
+  function docRows(list, rm) {
+    return list.map((f, i) => `<div class="doc"><span class="ext">${esc(ext(f.name))}</span><div class="dn"><b>${esc(f.name)}</b><small>${fsize(f)}</small></div>` + (rm
+      ? `<button type="button" class="btn danger small" data-act="${rm}" data-i="${i}">Remove</button>`
+      : `<span class="dbtn">${/\.pdf$/i.test(f.name) ? `<button type="button" class="btn ghost small" data-act="preview" data-u="${url(f)}">Preview</button>` : ''}<a class="btn small" href="${url(f)}" target="_blank" rel="noopener">Open</a><a class="btn ghost small" href="${url(f)}" download="${esc(f.name)}">Download</a></span>`) + '</div>').join('');
+  }
+  async function seedDocs() {
+    if (await dbGetKV('docs1')) return;
+    await dbPutKV('docs1', 1);
+    if (profile.docs && profile.docs.length) return;
+    const docs = [];
+    for (const n of ['Zaheer_Abbas_CV.pdf', 'Zaheer_Abbas_Portfolio.pdf']) {
+      try { docs.push(new File([await (await fetch('assets/' + n)).blob()], n, { type: 'application/pdf' })); } catch (e) {}
+    }
+    profile = Object.assign({}, profile, { docs });
+    await dbPutKV('profile', profile);
   }
 
   /* ---------- theme, visitor mode, seed ---------- */
@@ -351,12 +373,15 @@
       if (pr.images.length) counts.push(pr.images.length + (pr.images.length === 1 ? ' image' : ' images'));
       if (pr.videos.length) counts.push(pr.videos.length + (pr.videos.length === 1 ? ' video' : ' videos'));
       if (pr.graphs.length) counts.push(pr.graphs.length + (pr.graphs.length === 1 ? ' graph' : ' graphs'));
+      if ((pr.files || []).length) counts.push(pr.files.length + (pr.files.length === 1 ? ' file' : ' files'));
       return `<article class="pcard" data-open="${esc(pr.id)}" data-text="${esc((pr.title + ' ' + pr.tools.join(' ') + ' ' + pr.summary).toLowerCase())}" tabindex="0" role="button" aria-label="Open ${esc(pr.title)}">
         ${pr.images.length ? `<img class="cover" src="${url(pr.images[0])}" alt="">` : `<div class="nocover">${esc(pr.title.slice(0, 2))}</div>`}
         <div class="pbody"><h3>${esc(pr.title)}</h3>${pr.summary ? `<p>${esc(pr.summary)}</p>` : ''}
           ${pr.tools.length ? `<ul class="tags">${pr.tools.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
           ${counts.length ? `<span class="counts">${counts.join(' \u00b7 ')}</span>` : ''}</div></article>`;
     }).join('');
+    const freq = {}; projects.forEach((x) => x.tools.forEach((t) => { freq[t] = (freq[t] || 0) + 1; }));
+    const chips = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 8).map((t) => `<button type="button" class="chip" data-act="chip" data-i="${esc(t)}">${esc(t)}</button>`).join('');
     const sw = ACCENTS.map((a) => `<button type="button" class="sw" style="background:${a}" data-act="accent" data-i="${a}" aria-label="Accent ${a}"></button>`).join('');
     view.innerHTML = `
       <section class="hero">
@@ -383,9 +408,11 @@
       ${exp ? `<div class="sec-head"><h2>Experience</h2></div><ul class="tls">${exp}</ul>` : ''}
       <div class="sec-head"><h2>Projects</h2><span class="label">${projects.length}</span></div>
       ${projects.length > 3 ? `<input type="search" id="q" class="search noprint" placeholder="Search projects or tools, e.g. PLC" aria-label="Search projects">` : ''}
+      ${projects.length > 3 && chips ? `<div class="chips noprint">${chips}<button type="button" class="chip" data-act="chip" data-i="">All</button></div>` : ''}
       ${projects.length ? `<div class="grid">${cards}</div><p class="empty" id="noq" hidden>No project matches your search.</p>` : `
         <div class="empty"><p>No projects yet. Add your first project with its details, images, videos and graphs, and it will appear here.</p>
         <button type="button" class="btn" data-act="new">Add a project</button></div>`}
+      ${(p.docs || []).length ? `<div class="sec-head"><h2>Documents</h2><span class="label">${p.docs.length}</span></div><div class="docs">${docRows(p.docs)}</div>` : ''}
       ${skills ? `<div class="sec-head"><h2>Skills</h2></div><div class="skills">${skills}</div>` : ''}
       ${p.eduText ? `<div class="sec-head"><h2>Education</h2></div><ul class="tls">${rows(p.eduText)}</ul>` : ''}
       ${p.certsText ? `<div class="sec-head"><h2>Certifications</h2></div><ul class="tls">${rows(p.certsText)}</ul>` : ''}
@@ -416,17 +443,18 @@
         ${p.images.length ? `<div class="block"><p class="label">Images</p><div class="gallery">${p.images.map((b, i) => `<img src="${url(b)}" alt="Project image ${i + 1}" data-act="zoom">`).join('')}</div></div>` : ''}
         ${p.videos.length ? `<div class="block"><p class="label">Videos</p>${p.videos.map((b) => `<video controls preload="metadata" playsinline src="${url(b)}"></video>`).join('')}</div>` : ''}
         ${links.length ? `<div class="block"><p class="label">Links</p><div class="links">${links.map((l) => /^https?:\/\//i.test(l) ? `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l)}</a>` : `<span>${esc(l)}</span>`).join('')}</div></div>` : ''}
+        ${(p.files || []).length ? `<div class="block"><p class="label">Documents</p><div class="docs">${docRows(p.files)}</div></div>` : ''}
         ${p.graphs.length ? `<div class="block"><p class="label">Graphs</p>${p.graphs.map((g, i) => `<figure class="chart">${g.title ? `<h3>${esc(g.title)}</h3>` : ''}<canvas data-gview="${i}" role="img" aria-label="${esc(g.title || 'Graph')}"></canvas></figure>`).join('')}</div>` : ''}
       </article>`;
     drawAllCharts();
   }
 
   /* ---------- add / edit project ---------- */
-  const blankDraft = () => ({ id: null, created: null, title: '', date: '', toolsText: '', summary: '', work: '', links: '', images: [], videos: [], graphs: [] });
+  const blankDraft = () => ({ id: null, created: null, title: '', date: '', toolsText: '', summary: '', work: '', links: '', images: [], videos: [], files: [], graphs: [] });
   const draftFrom = (p) => ({
     id: p.id, created: p.created, title: p.title, date: p.date || '', toolsText: p.tools.join(', '),
     summary: p.summary || '', work: p.work || '', links: p.links || '',
-    images: p.images.slice(), videos: p.videos.slice(), graphs: p.graphs.map((g) => Object.assign({}, g))
+    images: p.images.slice(), videos: p.videos.slice(), files: (p.files || []).slice(), graphs: p.graphs.map((g) => Object.assign({}, g))
   });
 
   function renderForm() {
@@ -463,6 +491,13 @@
           <label class="field"><span>Add videos from gallery</span><input type="file" id="f-videos" accept="video/*" multiple></label>
           <p class="note">Videos take a lot of phone storage. For long videos, paste a YouTube or Drive link below instead.</p>
           <label class="field"><span>Video or other links, one per line</span><textarea data-f="links" rows="3" placeholder="https://...">${esc(d.links)}</textarea></label>
+        </section>
+
+        <section class="panel">
+          <h2>Documents</h2>
+          ${d.files.length ? `<div class="docs">${docRows(d.files, 'rm-file')}</div>` : ''}
+          <label class="field"><span>Add PDF, PowerPoint, Word, Excel or any file</span><input type="file" id="f-files" multiple></label>
+          <p class="note">Files are stored on this phone. Visitors can preview PDFs and open or download every file.</p>
         </section>
 
         <section class="panel">
@@ -504,6 +539,7 @@
       links: d.links.trim(),
       images: d.images,
       videos: d.videos,
+      files: d.files,
       graphs: d.graphs.filter((g) => g.title.trim() || g.data.trim()),
       created: d.created || now,
       updated: now
@@ -548,6 +584,11 @@
             <label class="field"><span>Phone or WhatsApp</span><input type="tel" data-p="phone" value="${esc(p.phone)}" autocomplete="tel"></label>
           </div>
           <label class="field"><span>LinkedIn link</span><input type="url" data-p="linkedin" value="${esc(p.linkedin)}" placeholder="https://linkedin.com/in/..." autocomplete="off"></label>
+        </section>
+        <section class="panel">
+          <h2>Documents</h2>
+          ${(p.docs || []).length ? `<div class="docs">${docRows(p.docs, 'rm-doc')}</div>` : ''}
+          <label class="field"><span>Add CV, certificates, slides or any file</span><input type="file" id="p-docs" multiple></label>
         </section>
         <section class="panel">
           <h2>Resume sections</h2>
@@ -617,13 +658,14 @@
     const withVideos = $('#b-videos') && $('#b-videos').checked;
     const out = {
       app: 'portfolio-builder', version: 1, exported: new Date().toISOString(), videosIncluded: !!withVideos,
-      profile: Object.assign({}, profile, { photo: profile.photo ? await toDataURL(profile.photo) : null }),
+      profile: Object.assign({}, profile, { photo: profile.photo ? await toDataURL(profile.photo) : null, docs: await Promise.all((profile.docs || []).map(fileToObj)) }),
       projects: []
     };
     for (const p of projects) {
       out.projects.push(Object.assign({}, p, {
         images: await Promise.all(p.images.map(toDataURL)),
-        videos: withVideos ? await Promise.all(p.videos.map(toDataURL)) : []
+        videos: withVideos ? await Promise.all(p.videos.map(toDataURL)) : [],
+        files: await Promise.all((p.files || []).map(fileToObj))
       }));
     }
     const name = 'portfolio-backup-' + new Date().toISOString().slice(0, 10) + '.json';
@@ -660,13 +702,15 @@
         const old = existing.get(p.id);
         const rec = Object.assign({}, p, {
           images: await Promise.all((p.images || []).map(toBlob)),
-          videos: data.videosIncluded ? await Promise.all((p.videos || []).map(toBlob)) : (old ? old.videos : [])
+          videos: data.videosIncluded ? await Promise.all((p.videos || []).map(toBlob)) : (old ? old.videos : []),
+          files: await Promise.all((p.files || []).map(objToFile))
         });
         await dbPutProject(rec);
       }
       if (data.profile) {
         const pr = Object.assign({}, data.profile);
         pr.photo = pr.photo ? await toBlob(pr.photo) : undefined;
+        pr.docs = await Promise.all((pr.docs || []).map(objToFile));
         await dbPutKV('profile', pr);
       }
       await loadAll();
@@ -707,6 +751,10 @@
       case 'save-profile': saveProfile(); break;
       case 'backup': downloadBackup(); break;
       case 'share-backup': shareBackup(); break;
+      case 'rm-file': draft.files.splice(+i, 1); renderForm(); break;
+      case 'rm-doc': pdraft.docs.splice(+i, 1); renderProfile(); break;
+      case 'preview': { const row = el.closest('.doc'); const nx = row.nextElementSibling; if (nx && nx.classList.contains('pv')) nx.remove(); else row.insertAdjacentHTML('afterend', `<iframe class="pv" src="${el.dataset.u}" title="PDF preview"></iframe>`); break; }
+      case 'chip': { const q = $('#q'); if (q) { q.value = i; onField(q); } break; }
       case 'print': window.print(); break;
       case 'share': try { await navigator.share({ title: profile.name, url: location.href }); } catch (err) { if (navigator.clipboard) { navigator.clipboard.writeText(location.href); toast('Link copied'); } } break;
       case 'theme': LS.set('pb-theme', (LS.get('pb-theme') || 'dark') === 'dark' ? 'light' : 'dark'); applyTheme(); break;
@@ -716,8 +764,8 @@
       case 'reseed':
         if (window.confirm('Replace everything with the original CV data? Your edits will be lost.')) {
           for (const x of projects) await dbDelProject(x.id);
-          await tx('kv', 'readwrite', (s) => { s.delete('profile'); s.delete('seeded'); });
-          projects = []; profile = {}; await seedOnce(); toast('Reset done'); go('portfolio');
+          await tx('kv', 'readwrite', (s) => { s.delete('profile'); s.delete('seeded'); s.delete('docs1'); });
+          projects = []; profile = {}; await seedOnce(); await seedDocs(); toast('Reset done'); go('portfolio');
         }
         break;
       case 'install':
@@ -756,6 +804,8 @@
       Array.from(t.files).forEach((f) => draft.videos.push(f));
       renderForm();
     }
+    if (t.id === 'f-files' && t.files.length) { Array.from(t.files).forEach((f) => draft.files.push(f)); renderForm(); }
+    if (t.id === 'p-docs' && t.files.length) { pdraft.docs = (pdraft.docs || []).concat(Array.from(t.files)); renderProfile(); }
     if (t.id === 'p-photo' && t.files.length) {
       try { pdraft.photo = await resizeImage(t.files[0], 480, 0.88); renderProfile(); } catch (err) { toast(err.message); }
     }
@@ -789,6 +839,7 @@
       await openDB();
       await loadAll();
       await seedOnce();
+      await seedDocs();
       applyTheme();
       go('portfolio');
     } catch (err) {

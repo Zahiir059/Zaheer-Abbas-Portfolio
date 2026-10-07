@@ -8,6 +8,8 @@ Installable portfolio app, already filled with the details from your CV and port
 - Everything editable: Profile tab (resume sections) and Add/Edit for projects (images, videos, graphs)
 - Dark / Light mode and 5 accent colours
 - Download CV as PDF (print layout), WhatsApp, email, call and share buttons
+- Attach PDF, PowerPoint, Word, Excel or any file to profile and projects (PDF preview, open, download)
+- Tag chips and search for projects
 - Visitor mode with optional PIN, backup/restore, works offline, installable on phone
 
 ## Put it online (GitHub Pages)
